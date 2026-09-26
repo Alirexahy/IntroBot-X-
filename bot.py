@@ -18,6 +18,15 @@ from telegram.ext import (
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", "10000"))
 PUBLIC_URL = os.getenv("RENDER_EXTERNAL_URL")
+INTRO_TOPIC_ID_RAW = os.getenv("INTRO_TOPIC_ID")
+
+try:
+    INTRO_TOPIC_ID = int(INTRO_TOPIC_ID_RAW) if INTRO_TOPIC_ID_RAW else None
+except ValueError as exc:
+    raise RuntimeError("INTRO_TOPIC_ID must be a numeric Telegram topic ID.") from exc
+
+if INTRO_TOPIC_ID is not None and INTRO_TOPIC_ID <= 0:
+    raise RuntimeError("INTRO_TOPIC_ID must be a positive integer.")
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN is not set.")
@@ -67,6 +76,14 @@ async def intro_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("این دستور را داخل گروه ارسال کنید.")
         return
 
+    if INTRO_TOPIC_ID is None:
+        await update.message.reply_text(
+            "❌ تاپیک انتشار معارفه هنوز تنظیم نشده است.\n\n"
+            "دستور /topicid را داخل تاپیک موردنظر بزنید، سپس شناسه نمایش‌داده‌شده "
+            "را در Render با نام INTRO_TOPIC_ID ثبت و سرویس را دوباره Deploy کنید."
+        )
+        return
+
     bot_username = context.bot.username
     deep_link = f"https://t.me/{bot_username}?start=g_{chat.id}"
 
@@ -76,8 +93,32 @@ async def intro_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "👋 برای ثبت معارفه روی دکمه زیر بزنید.\n\n"
-        "اطلاعات در خصوصی دریافت می‌شود و بعد از تأیید داخل همین گروه نمایش داده خواهد شد.",
+        "اطلاعات در خصوصی دریافت می‌شود و بعد از تأیید داخل تاپیک معارفه نمایش داده خواهد شد.",
         reply_markup=keyboard,
+    )
+
+
+async def topic_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    message = update.effective_message
+
+    if chat.type == "private":
+        await message.reply_text("این دستور را داخل تاپیک موردنظر در گروه ارسال کنید.")
+        return
+
+    topic_id = message.message_thread_id
+    if topic_id is None:
+        await message.reply_text(
+            "این پیام داخل یک تاپیک ارسال نشده است.\n"
+            "وارد تاپیک موردنظر شوید و همان‌جا /topicid را بزنید."
+        )
+        return
+
+    await message.reply_text(
+        "🧵 <b>شناسه این تاپیک:</b>\n"
+        f"<code>{topic_id}</code>\n\n"
+        "این عدد را در Render با نام INTRO_TOPIC_ID ثبت کنید.",
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -240,6 +281,13 @@ async def confirm_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
+    if INTRO_TOPIC_ID is None:
+        await query.edit_message_text(
+            "❌ تاپیک انتشار معارفه تنظیم نشده است.\n"
+            "لطفاً از مدیر گروه بخواهید INTRO_TOPIC_ID را تنظیم کند."
+        )
+        return ConversationHandler.END
+
     try:
         member = await context.bot.get_chat_member(group_id, user.id)
         if member.status in {ChatMemberStatus.LEFT, ChatMemberStatus.BANNED}:
@@ -248,6 +296,7 @@ async def confirm_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             chat_id=group_id,
+            message_thread_id=INTRO_TOPIC_ID,
             text=profile_text(context.user_data, user),
             parse_mode=ParseMode.HTML,
             disable_web_page_preview=True,
@@ -255,12 +304,12 @@ async def confirm_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as exc:
         logger.exception("Failed to publish introduction: %s", exc)
         await query.edit_message_text(
-            "❌ ارسال معرفی به گروه انجام نشد.\n"
-            "دسترسی ربات برای ارسال پیام داخل گروه را بررسی کنید."
+            "❌ ارسال معرفی به تاپیک انجام نشد.\n"
+            "شناسه تاپیک و دسترسی ربات برای ارسال پیام را بررسی کنید."
         )
         return ConversationHandler.END
 
-    await query.edit_message_text("✅ معارفه شما با موفقیت داخل گروه منتشر شد.")
+    await query.edit_message_text("✅ معارفه شما با موفقیت داخل تاپیک منتشر شد.")
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -317,6 +366,7 @@ def main():
     )
 
     app.add_handler(CommandHandler("intro", intro_command), group=0)
+    app.add_handler(CommandHandler("topicid", topic_id_command), group=0)
     app.add_handler(conversation, group=1)
 
     webhook_secret = hashlib.sha256(BOT_TOKEN.encode()).hexdigest()

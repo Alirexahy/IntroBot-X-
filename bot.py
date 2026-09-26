@@ -21,6 +21,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", "10000"))
 PUBLIC_URL = os.getenv("RENDER_EXTERNAL_URL")
 INTRO_TOPIC_ID_RAW = os.getenv("INTRO_TOPIC_ID")
+BANNER_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "assets",
+    "intro_banner.jpeg",
+)
 
 try:
     INTRO_TOPIC_ID = int(INTRO_TOPIC_ID_RAW) if INTRO_TOPIC_ID_RAW else None
@@ -126,14 +131,33 @@ async def intro_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     deep_link = f"https://t.me/{bot_username}?start=g_{chat.id}"
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 ثبت معارفه", url=deep_link)]
+        [InlineKeyboardButton("📝 شروع معارفه", url=deep_link)]
     ])
 
-    await update.message.reply_text(
-        "👋 برای ثبت معارفه روی دکمه زیر بزنید.\n\n"
-        "اطلاعات در خصوصی دریافت می‌شود و بعد از تأیید داخل تاپیک معارفه نمایش داده خواهد شد.",
-        reply_markup=keyboard,
+    caption = (
+        "✨ <b>به خانواده ایکس خوش اومدی!</b>\n\n"
+        "برای اینکه اعضای گروه بهتر باهات آشنا بشن، روی دکمه زیر بزن و "
+        "فرم معارفه رو در خصوصی ربات تکمیل کن.\n\n"
+        "📋 فرم شامل ۱۲ سؤال کوتاهه.\n"
+        "🔒 فقط اطلاعاتی رو وارد کن که با انتشارش در گروه راحت هستی.\n"
+        "📌 بعد از تأیید، کارت معارفه داخل تاپیک مخصوص منتشر می‌شه."
     )
+
+    try:
+        with open(BANNER_PATH, "rb") as banner:
+            await update.message.reply_photo(
+                photo=banner,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
+            )
+    except Exception as exc:
+        logger.exception("Failed to send intro banner: %s", exc)
+        await update.message.reply_text(
+            caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard,
+        )
 
 
 async def topic_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

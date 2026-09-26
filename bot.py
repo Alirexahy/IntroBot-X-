@@ -2,6 +2,8 @@ import os
 import html
 import hashlib
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode, ChatMemberStatus
@@ -34,7 +36,21 @@ if not BOT_TOKEN:
 if not PUBLIC_URL:
     raise RuntimeError("RENDER_EXTERNAL_URL is not available.")
 
-NAME, AGE, AREA, REDLINE, ABOUT, CONFIRM = range(6)
+(
+    NAME,
+    NICKNAME,
+    BIRTH_DATE,
+    JOB,
+    AREA,
+    INTERESTS,
+    REDLINE,
+    PERSONALITY,
+    GOAL,
+    ABOUT,
+    SKILLS,
+    ACTIVITIES,
+    CONFIRM,
+) = range(13)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -44,27 +60,49 @@ logger = logging.getLogger(__name__)
 
 
 def profile_text(data, user=None):
-    name = html.escape(data["name"])
-    age = html.escape(data["age"])
-    area = html.escape(data["area"])
-    redline = html.escape(data["redline"])
-    about = html.escape(data["about"])
+    values = {
+        key: html.escape(data[key])
+        for key in (
+            "name",
+            "nickname",
+            "birth_date",
+            "age",
+            "job",
+            "area",
+            "interests",
+            "redline",
+            "personality",
+            "goal",
+            "about",
+            "skills",
+            "activities",
+        )
+    }
 
     mention = ""
     if user:
         mention = (
-            f'\n\n👤 <a href="tg://user?id={user.id}">'
-            f'{html.escape(user.full_name)}</a>'
+            f"\n\n🆔 <b>آیدی عددی تلگرام:</b> <code>{user.id}</code>"
+            f'\n👤 <b>پروفایل:</b> <a href="tg://user?id={user.id}">'
+            f"{html.escape(user.full_name)}</a>"
         )
 
     return (
-        "✨ <b>معارفه عضو گروه</b>\n"
+        "✨ <b>معارفه عضو خانواده ایکس</b>\n"
         "━━━━━━━━━━━━━━\n\n"
-        f"🪪 <b>نام:</b> {name}\n\n"
-        f"🎂 <b>سن:</b> {age}\n\n"
-        f"📍 <b>منطقه سکونت:</b> {area}\n\n"
-        f"🚫 <b>خط قرمز من:</b> {redline}\n\n"
-        f"💬 <b>یک جمله درباره من:</b>\n{about}"
+        f"🪪 <b>نام:</b> {values['name']}\n"
+        f"🏷 <b>نام یا لقب موردعلاقه:</b> {values['nickname']}\n"
+        f"🎂 <b>تاریخ تولد:</b> {values['birth_date']}\n"
+        f"🎈 <b>سن:</b> {values['age']} سال\n"
+        f"💼 <b>شغل:</b> {values['job']}\n"
+        f"📍 <b>محدوده سکونت در کرج:</b> {values['area']}\n\n"
+        f"❤️ <b>علایق:</b> {values['interests']}\n"
+        f"🚫 <b>خط قرمز:</b> {values['redline']}\n"
+        f"🧭 <b>تیپ اجتماعی:</b> {values['personality']}\n\n"
+        f"🎯 <b>هدف از حضور در گروه:</b>\n{values['goal']}\n\n"
+        f"💬 <b>یک جمله درباره من:</b>\n{values['about']}\n\n"
+        f"🛠 <b>مهارت یا تجربه قابل اشتراک:</b>\n{values['skills']}\n\n"
+        f"🎉 <b>فعالیت‌های پیشنهادی برای گروه:</b>\n{values['activities']}"
         f"{mention}"
     )
 
@@ -166,7 +204,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["group_id"] = group_id
 
     await update.message.reply_text(
-        "عالی 👌\n\n1️⃣ <b>نام شما چیست؟</b>",
+        "عالی 👌\n\n"
+        "پاسخ‌های شما پس از تأیید داخل تاپیک معارفه منتشر می‌شوند؛ "
+        "فقط اطلاعاتی را وارد کنید که با انتشار آن‌ها راحت هستید.\n\n"
+        "1️⃣ <b>اسمت چیه؟</b>",
         parse_mode=ParseMode.HTML,
     )
     return NAME
@@ -180,10 +221,25 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["name"] = value
     await update.message.reply_text(
-        "2️⃣ <b>چند سالته؟</b>\n\nمثلاً: 28",
+        "2️⃣ <b>دوست داری با چه اسم یا لقبی صدات کنیم؟</b>",
         parse_mode=ParseMode.HTML,
     )
-    return AGE
+    return NICKNAME
+
+
+async def get_nickname(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    value = update.message.text.strip()
+    if not 1 <= len(value) <= 50:
+        await update.message.reply_text("نام یا لقب باید حداکثر ۵۰ کاراکتر باشد.")
+        return NICKNAME
+
+    context.user_data["nickname"] = value
+    await update.message.reply_text(
+        "3️⃣ <b>تاریخ تولدت رو به‌صورت روز/ماه/سال وارد کن.</b>\n\n"
+        "مثال: <code>۱۵/۰۷/۱۳۷۵</code>",
+        parse_mode=ParseMode.HTML,
+    )
+    return BIRTH_DATE
 
 
 def normalize_digits(value: str) -> str:
@@ -191,22 +247,119 @@ def normalize_digits(value: str) -> str:
     return value.translate(table)
 
 
-async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    value = update.message.text.strip()
-    normalized = normalize_digits(value)
+def normalize_birth_date(value: str):
+    normalized = normalize_digits(value.strip()).replace("-", "/").replace(".", "/")
+    parts = normalized.split("/")
 
-    if not normalized.isdigit():
-        await update.message.reply_text("لطفاً سن را فقط به صورت عدد وارد کنید.")
-        return AGE
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return None
 
-    age = int(normalized)
-    if not 10 <= age <= 100:
-        await update.message.reply_text("لطفاً یک سن معتبر وارد کنید.")
-        return AGE
+    day, month, year = map(int, parts)
+    if not 1300 <= year <= 1500 or not 1 <= month <= 12:
+        return None
 
-    context.user_data["age"] = value
+    if month <= 6:
+        max_day = 31
+    elif month <= 11:
+        max_day = 30
+    else:
+        is_leap = year % 33 in {1, 5, 9, 13, 17, 22, 26, 30}
+        max_day = 30 if is_leap else 29
+
+    if not 1 <= day <= max_day:
+        return None
+
+    return f"{day:02d}/{month:02d}/{year:04d}"
+
+
+def gregorian_to_jalali(year: int, month: int, day: int):
+    month_offsets = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+
+    if year > 1600:
+        jalali_year = 979
+        year -= 1600
+    else:
+        jalali_year = 0
+        year -= 621
+
+    adjusted_year = year + 1 if month > 2 else year
+    days = (
+        365 * year
+        + (adjusted_year + 3) // 4
+        - (adjusted_year + 99) // 100
+        + (adjusted_year + 399) // 400
+        - 80
+        + day
+        + month_offsets[month - 1]
+    )
+
+    jalali_year += 33 * (days // 12053)
+    days %= 12053
+    jalali_year += 4 * (days // 1461)
+    days %= 1461
+
+    if days > 365:
+        jalali_year += (days - 1) // 365
+        days = (days - 1) % 365
+
+    if days < 186:
+        jalali_month = 1 + days // 31
+        jalali_day = 1 + days % 31
+    else:
+        jalali_month = 7 + (days - 186) // 30
+        jalali_day = 1 + (days - 186) % 30
+
+    return jalali_year, jalali_month, jalali_day
+
+
+def calculate_age(birth_date: str, today_jalali=None) -> int:
+    birth_day, birth_month, birth_year = map(int, birth_date.split("/"))
+
+    if today_jalali is None:
+        now = datetime.now(ZoneInfo("Asia/Tehran"))
+        today_jalali = gregorian_to_jalali(now.year, now.month, now.day)
+
+    today_year, today_month, today_day = today_jalali
+    birthday_passed = (today_month, today_day) >= (birth_month, birth_day)
+    return today_year - birth_year - (0 if birthday_passed else 1)
+
+
+async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    birth_date = normalize_birth_date(update.message.text)
+
+    if birth_date is None:
+        await update.message.reply_text(
+            "لطفاً یک تاریخ شمسی معتبر با فرمت روز/ماه/سال وارد کنید.\n"
+            "مثال: ۱۵/۰۷/۱۳۷۵"
+        )
+        return BIRTH_DATE
+
+    age = calculate_age(birth_date)
+    if not 0 <= age <= 120:
+        await update.message.reply_text(
+            "تاریخ تولد واردشده قابل قبول نیست. لطفاً تاریخ صحیح را وارد کنید."
+        )
+        return BIRTH_DATE
+
+    context.user_data["birth_date"] = birth_date
+    context.user_data["age"] = str(age)
     await update.message.reply_text(
-        "3️⃣ <b>منطقه سکونتت کجاست؟</b>\n\nمثلاً: غرب تهران",
+        "4️⃣ <b>شغلت چیه؟</b>\n\n"
+        "اگر دانشجو هستی، رشته‌ات رو هم می‌تونی بنویسی.",
+        parse_mode=ParseMode.HTML,
+    )
+    return JOB
+
+
+async def get_job(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    value = update.message.text.strip()
+    if not 2 <= len(value) <= 100:
+        await update.message.reply_text("لطفاً شغلت را کوتاه و واضح بنویس.")
+        return JOB
+
+    context.user_data["job"] = value
+    await update.message.reply_text(
+        "5️⃣ <b>در کدوم محدودهٔ کرج زندگی می‌کنی؟</b>",
         parse_mode=ParseMode.HTML,
     )
     return AREA
@@ -220,7 +373,22 @@ async def get_area(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["area"] = value
     await update.message.reply_text(
-        "4️⃣ <b>خط قرمز شما چیست؟</b>\n\nمثلاً: بی‌احترامی",
+        "6️⃣ <b>به چه چیزهایی علاقه داری؟</b>",
+        parse_mode=ParseMode.HTML,
+    )
+    return INTERESTS
+
+
+async def get_interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    value = update.message.text.strip()
+    if not 2 <= len(value) <= 300:
+        await update.message.reply_text("علایقت را در حداکثر ۳۰۰ کاراکتر بنویس.")
+        return INTERESTS
+
+    context.user_data["interests"] = value
+    await update.message.reply_text(
+        "7️⃣ <b>مهم‌ترین خط قرمزت در ارتباط با دیگران چیه؟</b>\n\n"
+        "مثلاً: بی‌احترامی",
         parse_mode=ParseMode.HTML,
     )
     return REDLINE
@@ -233,8 +401,54 @@ async def get_redline(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return REDLINE
 
     context.user_data["redline"] = value
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("درون‌گرا", callback_data="personality_introvert"),
+            InlineKeyboardButton("برون‌گرا", callback_data="personality_extrovert"),
+        ],
+        [InlineKeyboardButton("میانه‌گرا", callback_data="personality_ambivert")],
+    ])
+
     await update.message.reply_text(
-        "5️⃣ <b>در یک جمله خودت را معرفی کن 🙂</b>",
+        "8️⃣ <b>خودت رو بیشتر درون‌گرا، برون‌گرا یا میانه‌گرا می‌دونی؟</b>",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
+    )
+    return PERSONALITY
+
+
+async def get_personality(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    choices = {
+        "personality_introvert": "درون‌گرا",
+        "personality_extrovert": "برون‌گرا",
+        "personality_ambivert": "میانه‌گرا",
+    }
+    personality = choices.get(query.data)
+    if personality is None:
+        return PERSONALITY
+
+    context.user_data["personality"] = personality
+    await query.edit_message_text(
+        f"✅ انتخاب شما: <b>{personality}</b>\n\n"
+        "9️⃣ <b>هدفت از حضور در خانوادهٔ ایکس چیه؟</b>",
+        parse_mode=ParseMode.HTML,
+    )
+    return GOAL
+
+
+async def get_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    value = update.message.text.strip()
+    if not 3 <= len(value) <= 500:
+        await update.message.reply_text("پاسخ باید بین ۳ تا ۵۰۰ کاراکتر باشد.")
+        return GOAL
+
+    context.user_data["goal"] = value
+    await update.message.reply_text(
+        "🔟 <b>در یک جمله خودت رو معرفی کن.</b>",
         parse_mode=ParseMode.HTML,
     )
     return ABOUT
@@ -247,6 +461,35 @@ async def get_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ABOUT
 
     context.user_data["about"] = value
+    await update.message.reply_text(
+        "1️⃣1️⃣ <b>چه مهارت یا تجربه‌ای داری که دوست داری با اعضای گروه به اشتراک بذاری؟</b>\n\n"
+        "اگر موردی نداری، بنویس «ندارم».",
+        parse_mode=ParseMode.HTML,
+    )
+    return SKILLS
+
+
+async def get_skills(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    value = update.message.text.strip()
+    if not 2 <= len(value) <= 300:
+        await update.message.reply_text("پاسخ باید بین ۲ تا ۳۰۰ کاراکتر باشد.")
+        return SKILLS
+
+    context.user_data["skills"] = value
+    await update.message.reply_text(
+        "1️⃣2️⃣ <b>دوست داری چه فعالیت‌ها یا برنامه‌هایی در گروه برگزار بشه؟</b>",
+        parse_mode=ParseMode.HTML,
+    )
+    return ACTIVITIES
+
+
+async def get_activities(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    value = update.message.text.strip()
+    if not 2 <= len(value) <= 300:
+        await update.message.reply_text("پاسخ باید بین ۲ تا ۳۰۰ کاراکتر باشد.")
+        return ACTIVITIES
+
+    context.user_data["activities"] = value
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ تأیید و ارسال", callback_data="intro_confirm")],
@@ -273,7 +516,21 @@ async def confirm_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     group_id = context.user_data.get("group_id")
 
-    required = {"name", "age", "area", "redline", "about"}
+    required = {
+        "name",
+        "nickname",
+        "birth_date",
+        "age",
+        "job",
+        "area",
+        "interests",
+        "redline",
+        "personality",
+        "goal",
+        "about",
+        "skills",
+        "activities",
+    }
     if not group_id or not required.issubset(context.user_data):
         await query.edit_message_text(
             "❌ اطلاعات فرم منقضی شده است.\n"
@@ -324,7 +581,7 @@ async def restart_intro(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["group_id"] = group_id
 
     await query.edit_message_text(
-        "🔄 از اول شروع می‌کنیم.\n\n1️⃣ <b>نام شما چیست؟</b>",
+        "🔄 از اول شروع می‌کنیم.\n\n1️⃣ <b>اسمت چیه؟</b>",
         parse_mode=ParseMode.HTML,
     )
     return NAME
@@ -351,10 +608,19 @@ def main():
         entry_points=[CommandHandler("start", start)],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-            AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_age)],
+            NICKNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_nickname)],
+            BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_birth_date)],
+            JOB: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_job)],
             AREA: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_area)],
+            INTERESTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_interests)],
             REDLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_redline)],
+            PERSONALITY: [
+                CallbackQueryHandler(get_personality, pattern="^personality_")
+            ],
+            GOAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_goal)],
             ABOUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_about)],
+            SKILLS: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_skills)],
+            ACTIVITIES: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_activities)],
             CONFIRM: [
                 CallbackQueryHandler(confirm_intro, pattern="^intro_confirm$"),
                 CallbackQueryHandler(restart_intro, pattern="^intro_restart$"),
